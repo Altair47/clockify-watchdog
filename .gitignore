@@ -33,6 +33,7 @@ MANIFEST
 *.spec
 
 # Installer logs
+*.txt
 pip-log.txt
 pip-delete-this-directory.txt
 
@@ -120,6 +121,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments
+config.py
 .env
 .venv
 env/
