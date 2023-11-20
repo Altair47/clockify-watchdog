@@ -1,33 +1,52 @@
 import requests, json
 from config import *
 from datetime import datetime, timedelta
-
+from pathlib  import Path
+import os
 import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 
-def send_mail(message,receiver):
-    port = 587 
+def send_mail(message, receiver, file=None):
+    port = 587
     smtp_server = "smtp.mandrillapp.com"
-    login = MANDRIL_LOGIN 
-    password = MANDRIL_API_KEY
+    login = MANDRIL_LOGIN  # Replace with your Mandrill login
+    password = MANDRIL_API_KEY  # Replace with your Mandrill API key
 
-    sender_email = SENDER_EMAIL
+    sender_email = SENDER_EMAIL  # Replace with your sender email
     receiver_email = receiver
 
     # Construct the email body
-    body = f"Hi, {message}!\n"
+    body = f"{message}\n"
 
-    # Construct the email headers
-    headers = f"Subject: Clockify Reminder\nFrom: {sender_email}\nTo: {receiver_email}\n"
+    # Create a MIME object
+    email_message = MIMEMultipart()
+    email_message['From'] = sender_email
+    email_message['To'] = receiver_email
+    email_message['Subject'] = "Clockify Reminder"
 
-    # Construct the full email message
-    email_message = headers + "\n" + body
+    # Attach the message body
+    email_message.attach(MIMEText(body, 'plain'))
 
-    # send your email
+    # Check if a file is provided and attach it
+    if file:
+        attachment = open(file, "rb")
+        part = MIMEBase('application', 'octet-stream')
+        part.set_payload(attachment.read())
+        encoders.encode_base64(part)
+        part.add_header('Content-Disposition', f"attachment; filename= {os.path.basename(file)}")
+        email_message.attach(part)
+
+    # Convert the email message to string
+    email_text = email_message.as_string()
+
+    # Send the email
     with smtplib.SMTP(smtp_server, port) as server:
+        server.starttls()
         server.login(login, password)
-        server.sendmail(
-            sender_email, receiver_email, email_message
-        )
+        server.sendmail(sender_email, receiver_email, email_text)
 
     print('Sent')
 
@@ -256,8 +275,9 @@ def GetUserTimes(user_id):
 
 test_Mode = False
 monitor_Mode = True
+exclude_list = EXCLUDE_LIST
 if __name__ == '__main__':
-    users = GetUsers()
+    users = GetUsers() # Call API to get all the users
     yesterdate = datetime.now().date()-timedelta(days=1)
     today = datetime.now()# Current Date/Time
     yesterday = datetime.now() - timedelta(days=1)
@@ -265,40 +285,72 @@ if __name__ == '__main__':
     end_date_of_week = start_date_of_week + timedelta(days=6, hours=23, minutes=59, seconds=59)
     end_date = datetime(today.year, today.month, today.day, 23, 59, 59) - timedelta(days=1) # Last second of yesterday
     start_date_yesterday = datetime(today.year, today.month, today.day, 0, 0, 0) - timedelta(days=1)
-    
+
+    #Folder handling
+    daily_csv_path = "~/clockify/reports_daily/"
+    weekly_csv_path = "~/clockify/reports_weekly/"
+    daily_csv_path = os.path.expanduser(daily_csv_path)
+    daily_csv_path = os.path.normpath(daily_csv_path)
+    weekly_csv_path = os.path.expanduser(weekly_csv_path)
+    weekly_csv_path = os.path.normpath(weekly_csv_path)
+    try:
+        os.makedirs(daily_csv_path)
+        os.makedirs(weekly_csv_path)
+    except Exception as e:
+        print(e)
+
+    #Make new file for yesterday.
+    with open(f"{daily_csv_path}/{datetime.now().date()}.csv", 'w+') as file1:
+        file1.write(f"sep=;\nStart_Date_Of_Yesterday;End_Date_Of_Yesterday;email;id;Day_Filled_Times;Remaining_Time\n")
+    #Make new file for last week.
+    with open(f"{weekly_csv_path}/{datetime.now().date()}.csv", 'w+') as file1:
+        file1.write(f"sep=;\nStart_Date_Of_Week;End_Date_Of_Week;email;id;Week_Filled_Times;Remaining_Time\n")
+
     for user in users:
-        if (datetime.now().weekday() == 6) and (test_Mode):
+        if user['email'] in exclude_list: continue
+        if (datetime.now().weekday() == 6):
             exit()
 
         print(f"\nUser ID: {user['id']}, User Name: {user['name']}, User Email: {user['email']}")
-        yesterday_User_Times,week_User_Times = GetUserTimes(user['id'])
-        if (datetime.now().weekday() <= 5) and (datetime.now().weekday() >= 1) or (test_Mode): #Tuesday(0) to Saturday(5)
+        yesterday_User_Times,week_User_Times = GetUserTimes(user['id']) # Get times
+        if ((datetime.now().weekday() <= 5) and (datetime.now().weekday() >= 1)) or (test_Mode): # Tuesday(1) to Saturday(5)
             if yesterday_User_Times < timedelta(hours=8):
-                #print(f"User: {user['name']},({user['email']}),({user['id']}) has not filled yesterday's ({start_date_yesterday}|{end_date}) 8 hour shift. {yesterday_User_Times} filled")
-
+                #Write to file
                 if test_Mode or monitor_Mode:
-                    with open("Day.txt", 'a') as file1:
-                        file1.write(f"{start_date_yesterday}|{end_date}	{user['email']}	{user['id']}	{yesterday_User_Times},	Remaining:{timedelta(hours=8)-yesterday_User_Times}\n")
+                    try:
+                        with open(f"{daily_csv_path}/{datetime.now().date()}.csv", 'a') as file1:
+                            file1.write(f"{start_date_yesterday};{end_date};{user['email']};{user['id']};{yesterday_User_Times};{timedelta(hours=8)-yesterday_User_Times}\n")
+                    except Exception as e:
+                        print(e)
 
-                message = f"{user['name']}! Looks like you forgot to fill your working hours yesterday (between {start_date_yesterday}|{end_date}) on clockify.com please take a bit of time to fill it to 8h"
+                message = f"Hi {user['name']}! Looks like you forgot to fill your working hours yesterday (between {start_date_yesterday}|{end_date}) on clockify.com please take a bit of time to fill it to 8h"
                 print(message)
-                try:
-                    send_mail(message,{user['email']})
-                except Exception as e:
-                    print(e)
-                    continue
-        if (datetime.now().weekday() == 0) or (test_Mode): #Monday(0)
+                if not test_Mode:
+                    try:
+                        send_mail(message,{user['email']})
+                    except Exception as e:
+                        print(e)
+                        continue
+
+        if (datetime.now().weekday() == 0) or (test_Mode): # Monday(0)
             if week_User_Times < timedelta(hours=40):
-                #print(f"User: {user['name']},({user['email']}),({user['id']}) has not filled this week's 40 hour shift. {week_User_Times} filled")
-
+                #Write to file
                 if test_Mode or monitor_Mode:
-                    with open("Week.txt", 'a') as file1:
-                        file1.write(f"{start_date_of_week}-{yesterday}	{user['email']}	{user['id']}	{week_User_Times},	Remaining:{timedelta(hours=40)-week_User_Times}\n")
+                    try:
+                        with open(f"{weekly_csv_path}/{datetime.now().date()}.csv", 'a') as file1:
+                            file1.write(f"{start_date_of_week};{end_date};{user['email']};{user['id']};{week_User_Times};{timedelta(hours=40)-week_User_Times}\n")
+                    except Exception as e:
+                        print(e)
 
-                message = f"{user['name']}! Looks like you forgot to fill your working hours last week (between {start_date_of_week}|{end_date_of_week}) on clockify.com please take a bit of time to fill it up to 40h"
+                message = f"Hi {user['name']}! Looks like you forgot to fill your working hours last week (between {start_date_of_week}|{end_date_of_week}) on clockify.com please take a bit of time to fill it up to 40h"
                 print(message)
-                try:
-                    send_mail(message,{user['email']})
-                except Exception as e:
-                    print(e)
-                    continue
+                if not test_Mode:
+                    try:
+                        send_mail(message,{user['email']})
+                    except Exception as e:
+                        print(e)
+                        continue
+
+    if (datetime.now().weekday() == 0):
+        for email in REPORTING_MAIL_LIST:
+            send_mail(f"Weekly report from {start_date_of_week} to {end_date} !",email,f"{weekly_csv_path}/{datetime.now().date()}.csv")
