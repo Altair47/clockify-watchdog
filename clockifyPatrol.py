@@ -248,28 +248,6 @@ def GetUserTimes(user_id):
         time_diff = end_time - start_time
         total_time_today += time_diff
 
-    ''' DEPRECATED
-    timeWeek   = total_time_week.total_seconds()     # Seconds
-    timeWeekH  = timeWeek // 3600                    # To Hours
-    timeWeekM  = timeWeek % 3600 / 60                # To Minutes
-    timeWeekR  = 144000 - timeWeek                   # To Minutes
-    timeToday  = total_time_today.total_seconds()
-    timeTodayH = timeToday // 3600                   # To Hours
-    timeTodayM = timeToday % 3600 / 60               # To Minutes
-    timeTodayR = 144000 - timeToday
-    '''
-
-    # Print the dates and total hours worked this week and today
-    #print("|--WEEK STATS--")
-    #print(f"    Start Date of This Week: {start_date_of_week.date()}")
-    #print(f"    End Date of This Week: {end_date.date()}")
-    #print(f"    Total Hours Worked This Week (Monday-Yesterday): {total_time_week} hours")
-    #print("|--YESTEDAY STATS--")
-    #print(f"    Start Time of Yesterday: {start_date_yesterday}")
-    #print(f"    End Date of Yesterday: {end_date}")
-    #print(f"    Total Hours Worked Yesterday: {total_time_today} hours")
-    #print(f"| Runtime date: {today}")
-
     return total_time_today,total_time_week
 
 
