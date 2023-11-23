@@ -15,16 +15,14 @@ def send_mail(message, receiver, file=None):
     login = MANDRIL_LOGIN  # Replace with your Mandrill login
     password = MANDRIL_API_KEY  # Replace with your Mandrill API key
 
-    sender_email = SENDER_EMAIL  # Replace with your sender email
-    receiver_email = receiver
 
     # Construct the email body
     body = f"{message}\n"
 
     # Create a MIME object
     email_message = MIMEMultipart()
-    email_message['From'] = sender_email
-    email_message['To'] = receiver_email
+    email_message['From'] = SENDER_EMAIL  # Replace with your sender email
+    email_message['To'] = receiver
     email_message['Subject'] = "Clockify Reminder"
 
     # Attach the message body
@@ -46,7 +44,7 @@ def send_mail(message, receiver, file=None):
     with smtplib.SMTP(smtp_server, port) as server:
         server.starttls()
         server.login(login, password)
-        server.sendmail(sender_email, receiver_email, email_text)
+        server.sendmail(SENDER_EMAIL, receiver, email_text)
 
     print('Sent')
 
@@ -305,7 +303,7 @@ if __name__ == '__main__':
                 print(message)
                 if not test_Mode:
                     try:
-                        send_mail(message,{user['email']})
+                        send_mail(message=message,receiver=user['email'])
                     except Exception as e:
                         print(e)
                         continue
@@ -324,11 +322,11 @@ if __name__ == '__main__':
                 print(message)
                 if not test_Mode:
                     try:
-                        send_mail(message,{user['email']})
+                        send_mail(message=message,receiver=user['email'])
                     except Exception as e:
                         print(e)
                         continue
 
-    if (datetime.now().weekday() == 0):
+    if (datetime.now().weekday() == 0) and not test_Mode:
         for email in REPORTING_MAIL_LIST:
             send_mail(f"Weekly report from {start_date_of_week} to {end_date} !",email,f"{weekly_csv_path}/{datetime.now().date()}.csv")
