@@ -9,6 +9,11 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 
+test_Mode = False
+monitor_Mode = True
+exclude_list = EXCLUDE_LIST
+
+
 def send_mail(message, receiver, file=None):
     port = 587
     smtp_server = "smtp.mandrillapp.com"
@@ -48,6 +53,7 @@ def send_mail(message, receiver, file=None):
 
     print('Sent')
 
+
 def GetWorkspaceId():
     # Endpoint URL
     url = "https://api.clockify.me/api/v1/workspaces"
@@ -71,6 +77,8 @@ def GetWorkspaceId():
             print("--------")
     else:
         print(f"Error: {response.status_code} - {response.text}")
+
+    return workspaces
 
 
 def GetUsers():
@@ -159,9 +167,9 @@ def GetUserTimes(user_id):
     workspace_id = WORKSPACEID
 
     # Calculate the start date for this week until now yesterday
-    today = datetime.now()# Current Date/Time
+    today = datetime.now() # Current Date/Time
     yesterday = datetime.now() - timedelta(days=today.weekday()+1)
-    start_date_of_week = yesterday - timedelta(days=yesterday.weekday(),hours=yesterday.hour, minutes=yesterday.minute, seconds=yesterday.second, microseconds=yesterday.microsecond)  # 00:00:00 Monday of last week
+    start_date_of_week = yesterday - timedelta(days=yesterday.weekday(),hours=yesterday.hour, minutes=yesterday.minute, seconds=yesterday.second, microseconds=yesterday.microsecond) # 00:00:00 Monday of last week
     end_date_of_week = start_date_of_week + timedelta(days=6, hours=23, minutes=59, seconds=59) # 23:59:59 Friday last week
     end_date = datetime(today.year, today.month, today.day, 23, 59, 59) - timedelta(days=1) # Last second of yesterday
 
@@ -249,20 +257,30 @@ def GetUserTimes(user_id):
     return total_time_today,total_time_week
 
 
-test_Mode = False
-monitor_Mode = True
-exclude_list = EXCLUDE_LIST
+def convert_timedelta_to_hours_seconds(totalSeconds):
+    if totalSeconds == 0:
+        return "00:00:00"
+    abs_seconds = abs(totalSeconds)
+    hours = str(int(abs_seconds // 3600)).zfill(2)
+    minutes = str(int((abs_seconds % 3600) // 60)).zfill(2)
+    seconds = str(int(abs_seconds % 60)).zfill(2)
+    if totalSeconds > 0:
+        return (f"{hours}h:{minutes}m:{seconds}s")
+    if totalSeconds < 0:
+        return (f"+{hours}h:{minutes}m:{seconds}s")
+
+
 if __name__ == '__main__':
     users = GetUsers() # Call API to get all the users
     yesterdate = datetime.now().date()-timedelta(days=1)
-    today = datetime.now()# Current Date/Time
+    today = datetime.now() # Current Date/Time
     yesterday = datetime.now() - timedelta(days=1)
-    start_date_of_week = yesterday - timedelta(days=yesterday.weekday(),hours=yesterday.hour, minutes=yesterday.minute, seconds=yesterday.second, microseconds=yesterday.microsecond)  # 00:00:00 Monday of last week
+    start_date_of_week = yesterday - timedelta(days=yesterday.weekday(),hours=yesterday.hour, minutes=yesterday.minute, seconds=yesterday.second, microseconds=yesterday.microsecond) # 00:00:00 Monday of last week
     end_date_of_week = start_date_of_week + timedelta(days=6, hours=23, minutes=59, seconds=59)
     end_date = datetime(today.year, today.month, today.day, 23, 59, 59) - timedelta(days=1) # Last second of yesterday
     start_date_yesterday = datetime(today.year, today.month, today.day, 0, 0, 0) - timedelta(days=1)
 
-    #Folder handling
+    # Folder handling
     daily_csv_path = "~/clockify/reports_daily/"
     weekly_csv_path = "~/clockify/reports_weekly/"
     daily_csv_path = os.path.expanduser(daily_csv_path)
@@ -275,30 +293,36 @@ if __name__ == '__main__':
     except Exception as e:
         print(e)
 
-    #Make new file for yesterday.
+    # Make new file for yesterday.
     with open(f"{daily_csv_path}/{datetime.now().date()}.csv", 'w+') as file1:
-        file1.write(f"sep=;\nStart_Date_Of_Yesterday;End_Date_Of_Yesterday;email;id;Day_Filled_Times;Remaining_Time\n")
-    #Make new file for last week.
+        file1.write(f"sep=,\nStart_Date_Of_Yesterday,End_Date_Of_Yesterday,email,id,Day_Filled_Times,Remaining_Time\n")
+
+    # Make new file for last week.
     with open(f"{weekly_csv_path}/{datetime.now().date()}.csv", 'w+') as file1:
-        file1.write(f"sep=;\nStart_Date_Of_Week;End_Date_Of_Week;email;id;Week_Filled_Times;Remaining_Time\n")
+        file1.write(f"sep=,\nStart_Date_Of_Week,End_Date_Of_Week,email,id,Week_Filled_Times,Remaining_Time\n")
+
 
     for user in users:
-        if user['email'] in exclude_list: continue
-        if (datetime.now().weekday() == 6):
+        if (datetime.now().weekday() == 6) and not test_Mode:
             exit()
 
         print(f"\nUser ID: {user['id']}, User Name: {user['name']}, User Email: {user['email']}")
-        yesterday_User_Times,week_User_Times = GetUserTimes(user['id']) # Get times
+        yesterday_User_Times,week_User_Times = GetUserTimes(user['id']) # Get times for current user iteration
+
+        # Day handling
         if ((datetime.now().weekday() <= 5) and (datetime.now().weekday() >= 1)) or (test_Mode): # Tuesday(1) to Saturday(5)
             if yesterday_User_Times < timedelta(hours=8):
                 #Write to file
                 if test_Mode or monitor_Mode:
                     try:
+                        Day_Filled_Times = convert_timedelta_to_hours_seconds(yesterday_User_Times.total_seconds())
+                        Remaining_Time = convert_timedelta_to_hours_seconds((timedelta(hours=8)-yesterday_User_Times).total_seconds())
                         with open(f"{daily_csv_path}/{datetime.now().date()}.csv", 'a') as file1:
-                            file1.write(f"{start_date_yesterday};{end_date};{user['email']};{user['id']};{yesterday_User_Times};{timedelta(hours=8)-yesterday_User_Times}\n")
+                            file1.write(f"{start_date_yesterday},{end_date},{user['email']},{user['id']},{yesterday_User_Times},{Remaining_Time}\n")
                     except Exception as e:
                         print(e)
 
+                if user['email'] in exclude_list: continue
                 message = f"Hi {user['name']}! Looks like you forgot to fill your working hours yesterday (between {start_date_yesterday}|{end_date}) on clockify.com please take a bit of time to fill it to 8h"
                 print(message)
                 if not test_Mode:
@@ -307,17 +331,19 @@ if __name__ == '__main__':
                     except Exception as e:
                         print(e)
                         continue
-
+        # Week handling
         if (datetime.now().weekday() == 0) or (test_Mode): # Monday(0)
-            if week_User_Times < timedelta(hours=40):
                 #Write to file
-                if test_Mode or monitor_Mode:
-                    try:
-                        with open(f"{weekly_csv_path}/{datetime.now().date()}.csv", 'a') as file1:
-                            file1.write(f"{start_date_of_week};{end_date};{user['email']};{user['id']};{week_User_Times};{timedelta(hours=40)-week_User_Times}\n")
-                    except Exception as e:
-                        print(e)
+            if test_Mode or monitor_Mode:
+                try:
+                    Week_Filled_Times = convert_timedelta_to_hours_seconds(week_User_Times.total_seconds())
+                    Remaining_Time = convert_timedelta_to_hours_seconds((timedelta(hours=40)-week_User_Times).total_seconds())
+                    with open(f"{weekly_csv_path}/{datetime.now().date()}.csv", 'a') as file1:
+                        file1.write(f"{start_date_of_week},{end_date},{user['email']},{user['id']},{Week_Filled_Times},{Remaining_Time}\n")
+                except Exception as e:
+                    print(e)
 
+            if week_User_Times < timedelta(hours=40):
                 message = f"Hi {user['name']}! Looks like you forgot to fill your working hours last week (between {start_date_of_week}|{end_date_of_week}) on clockify.com please take a bit of time to fill it up to 40h"
                 print(message)
                 if not test_Mode:
@@ -327,6 +353,6 @@ if __name__ == '__main__':
                         print(e)
                         continue
 
-    if (datetime.now().weekday() == 0) and not test_Mode:
-        for email in REPORTING_MAIL_LIST:
-            send_mail(f"Weekly report from {start_date_of_week} to {end_date} !",email,f"{weekly_csv_path}/{datetime.now().date()}.csv")
+            if not test_Mode:
+                for email in REPORTING_MAIL_LIST:
+                    send_mail(f"Weekly report from {start_date_of_week} to {end_date} !",email,f"{weekly_csv_path}/{datetime.now().date()}.csv")
