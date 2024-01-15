@@ -353,6 +353,7 @@ if __name__ == '__main__':
                         print(e)
                         continue
 
-            if not test_Mode:
-                for email in REPORTING_MAIL_LIST:
-                    send_mail(f"Weekly report from {start_date_of_week} to {end_date} !",email,f"{weekly_csv_path}/{datetime.now().date()}.csv")
+    # Send mails when "*.csv"s are populated
+    if (datetime.now().weekday() == 0) and not test_Mode:
+        for email in REPORTING_MAIL_LIST:
+            send_mail(f"Weekly report from {start_date_of_week} to {end_date} !",email,f"{weekly_csv_path}/{datetime.now().date()}.csv")
