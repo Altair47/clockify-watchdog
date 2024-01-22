@@ -294,12 +294,14 @@ if __name__ == '__main__':
         print(e)
 
     # Make new file for yesterday.
-    with open(f"{daily_csv_path}/{datetime.now().date()}.csv", 'w+') as file1:
-        file1.write(f"sep=,\nStart_Date_Of_Yesterday,End_Date_Of_Yesterday,email,id,Day_Filled_Times,Remaining_Time\n")
+    if ((datetime.now().weekday() <= 5) and (datetime.now().weekday() >= 1)) or (test_Mode):
+        with open(f"{daily_csv_path}/{datetime.now().date()}.csv", 'w+') as file1:
+            file1.write(f"sep=,\nStart_Date_Of_Yesterday,End_Date_Of_Yesterday,email,id,Day_Filled_Times,Remaining_Time\n")
 
     # Make new file for last week.
-    with open(f"{weekly_csv_path}/{datetime.now().date()}.csv", 'w+') as file1:
-        file1.write(f"sep=,\nStart_Date_Of_Week,End_Date_Of_Week,email,id,Week_Filled_Times,Remaining_Time\n")
+    if (datetime.now().weekday() == 0) or (test_Mode):
+        with open(f"{weekly_csv_path}/{datetime.now().date()}.csv", 'w+') as file1:
+            file1.write(f"sep=,\nStart_Date_Of_Week,End_Date_Of_Week,email,id,Week_Filled_Times,Remaining_Time\n")
 
 
     for user in users:
