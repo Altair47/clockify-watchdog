@@ -80,6 +80,24 @@ def GetWorkspaceId():
 
     return workspaces
 
+def GetWorkingHoursAndDays(userId):
+    url = f"https://api.clockify.me/api/v1/workspaces/{WORKSPACEID}/member-profile/{userId}"
+
+    headers = {
+        "X-Api-Key": CLOCKIFY_APIKEY,
+    }
+
+    params = {
+        "status": "ACTIVE",
+        "page-size": 200,
+    }
+
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        w = response.json()
+        return convertiso_8601_timeTime(w.get('workCapacity')), [w.lower() for w in w.get('workingDays')]
+    else:
+        print(f"Error: {response.status_code} - {response.text}")
 
 def GetUsers():
     # Endpoint URL
@@ -113,53 +131,53 @@ def GetUsers():
         print(f"Error: {response.status_code} - {response.text}")
 
 
-def GetUserWork(start_date=datetime(2023, 5, 29)):
-    user_id = CLOCKIFY_TEST_USER
+# def GetUserWork(start_date=datetime(2023, 5, 29)):
+#     user_id = CLOCKIFY_TEST_USER
 
-    # Calculate end date (current date)
-    end_date = datetime.now()
+#     # Calculate end date (current date)
+#     end_date = datetime.now()
 
-    # Endpoint URL
-    url = f"https://api.clockify.me/api/v1/workspaces/{WORKSPACEID}/user/{user_id}/time-entries"
+#     # Endpoint URL
+#     url = f"https://api.clockify.me/api/v1/workspaces/{WORKSPACEID}/user/{user_id}/time-entries"
 
-    # Headers with API key
-    headers = {
-        "X-Api-Key": CLOCKIFY_APIKEY,
-    }
+#     # Headers with API key
+#     headers = {
+#         "X-Api-Key": CLOCKIFY_APIKEY,
+#     }
 
-    # Query parameters
-    params = {
-        "start": start_date.isoformat() + "Z",
-        "end": end_date.isoformat() + "Z",
-    }
+#     # Query parameters
+#     params = {
+#         "start": start_date.isoformat() + "Z",
+#         "end": end_date.isoformat() + "Z",
+#     }
 
-    # Send GET request
-    response = requests.get(url, headers=headers, params=params)
+#     # Send GET request
+#     response = requests.get(url, headers=headers, params=params)
 
-    # Check if the request was successful
-    if response.status_code == 200:
-        time_entries = response.json()
+#     # Check if the request was successful
+#     if response.status_code == 200:
+#         time_entries = response.json()
 
-        total_time = timedelta()  # Initialize total time as timedelta
+#         total_time = timedelta()  # Initialize total time as timedelta
 
-        # Iterate over time entries and calculate total time
-        for entry in time_entries:
-            start_time = datetime.fromisoformat(entry['timeInterval']['start'])
-            end_time = datetime.fromisoformat(entry['timeInterval']['end'])
-            time_diff = end_time - start_time
-            total_time += time_diff
+#         # Iterate over time entries and calculate total time
+#         for entry in time_entries:
+#             start_time = datetime.fromisoformat(entry['timeInterval']['start'])
+#             end_time = datetime.fromisoformat(entry['timeInterval']['end'])
+#             time_diff = end_time - start_time
+#             total_time += time_diff
 
-            print(f"Time Entry ID: {entry['id']}")
-            print(f"User ID: {entry['userId']}")
-            print(f"Description: {entry['description']}")
-            print(f"Start Time: {start_time}")
-            print(f"End Time: {end_time}")
-            print("--------")
+#             print(f"Time Entry ID: {entry['id']}")
+#             print(f"User ID: {entry['userId']}")
+#             print(f"Description: {entry['description']}")
+#             print(f"Start Time: {start_time}")
+#             print(f"End Time: {end_time}")
+#             print("--------")
 
-        # Print total time worked
-        print(f"Total Time Worked: {total_time.total_seconds()/3600}")
-    else:
-        print(f"Error: {response.status_code} - {response.text}")
+#         # Print total time worked
+#         print(f"Total Time Worked: {total_time.total_seconds()/3600}")
+#     else:
+#         print(f"Error: {response.status_code} - {response.text}")
 
 
 def GetUserTimes(user_id):
@@ -256,6 +274,18 @@ def GetUserTimes(user_id):
 
     return total_time_today,total_time_week
 
+def convertiso_8601_timeTime(iso_8601_time='PT0H0M0S'):
+    if not iso_8601_time:
+        return '00:00:00'
+    # Extract hours, minutes, and seconds from the ISO 8601 duration
+    hours = 0
+    minutes = 0
+    seconds = 0
+
+    if 'H' in iso_8601_time:
+        hours_index = iso_8601_time.index('H')
+        hours = int(iso_8601_time[2:hours_index])
+    return hours
 
 def convert_timedelta_to_hours_seconds(totalSeconds):
     if totalSeconds == 0:
@@ -269,8 +299,7 @@ def convert_timedelta_to_hours_seconds(totalSeconds):
     if totalSeconds < 0:
         return (f"+{hours}h:{minutes}m:{seconds}s")
 
-
-if __name__ == '__main__':
+def main():
     users = GetUsers() # Call API to get all the users
     yesterdate = datetime.now().date()-timedelta(days=1)
     today = datetime.now() # Current Date/Time
@@ -308,24 +337,31 @@ if __name__ == '__main__':
         if (datetime.now().weekday() == 6) and not test_Mode:
             exit()
 
+        if user['email'] in CUSTOM_EMPLOYEES:
+            work_hours, work_days = GetWorkingHoursAndDays(user.get('id'))
+            week_work_hours = work_hours * len(work_days)
+
+
         print(f"\nUser ID: {user['id']}, User Name: {user['name']}, User Email: {user['email']}")
         yesterday_User_Times,week_User_Times = GetUserTimes(user['id']) # Get times for current user iteration
 
         # Day handling
         if ((datetime.now().weekday() <= 5) and (datetime.now().weekday() >= 1)) or (test_Mode): # Tuesday(1) to Saturday(5)
-            if yesterday_User_Times < timedelta(hours=8):
+            if yesterday_User_Times < timedelta(hours=work_hours):
                 #Write to file
                 if test_Mode or monitor_Mode:
                     try:
                         Day_Filled_Times = convert_timedelta_to_hours_seconds(yesterday_User_Times.total_seconds())
-                        Remaining_Time = convert_timedelta_to_hours_seconds((timedelta(hours=8)-yesterday_User_Times).total_seconds())
+                        Remaining_Time = convert_timedelta_to_hours_seconds((timedelta(hours=work_hours)-yesterday_User_Times).total_seconds())
                         with open(f"{daily_csv_path}/{datetime.now().date()}.csv", 'a') as file1:
                             file1.write(f"{start_date_yesterday},{end_date},{user['email']},{user['id']},{yesterday_User_Times},{Remaining_Time}\n")
                     except Exception as e:
                         print(e)
 
                 if user['email'] in exclude_list: continue
-                message = f"Hi {user['name']}! Looks like you forgot to fill your working hours yesterday (between {start_date_yesterday}|{end_date}) on clockify.com please take a bit of time to fill it to 8h"
+                if not (datetime.now()-timedelta(days=1)).strftime("%A").lower() in work_days: continue # if yesterday was not a working day, skip user
+
+                message = f"Hi {user['name']}! Looks like you forgot to fill your working hours yesterday (between {start_date_yesterday}|{end_date}) on clockify.com please take a bit of time to fill it to {work_hours}h"
                 print(message)
                 if not test_Mode:
                     try:
@@ -335,18 +371,18 @@ if __name__ == '__main__':
                         continue
         # Week handling
         if (datetime.now().weekday() == 0) or (test_Mode): # Monday(0)
-                #Write to file
+            #Write to file
             if test_Mode or monitor_Mode:
                 try:
                     Week_Filled_Times = convert_timedelta_to_hours_seconds(week_User_Times.total_seconds())
-                    Remaining_Time = convert_timedelta_to_hours_seconds((timedelta(hours=40)-week_User_Times).total_seconds())
+                    Remaining_Time = convert_timedelta_to_hours_seconds((timedelta(hours=week_work_hours)-week_User_Times).total_seconds())
                     with open(f"{weekly_csv_path}/{datetime.now().date()}.csv", 'a') as file1:
                         file1.write(f"{start_date_of_week},{end_date},{user['email']},{user['id']},{Week_Filled_Times},{Remaining_Time}\n")
                 except Exception as e:
                     print(e)
 
-            if week_User_Times < timedelta(hours=40):
-                message = f"Hi {user['name']}! Looks like you forgot to fill your working hours last week (between {start_date_of_week}|{end_date_of_week}) on clockify.com please take a bit of time to fill it up to 40h"
+            if week_User_Times < timedelta(hours=week_work_hours):
+                message = f"Hi {user['name']}! Looks like you forgot to fill your working hours last week (between {start_date_of_week}|{end_date_of_week}) on clockify.com please take a bit of time to fill it up to {week_work_hours}h"
                 print(message)
                 if not test_Mode:
                     try:
@@ -359,3 +395,6 @@ if __name__ == '__main__':
     if (datetime.now().weekday() == 0) and not test_Mode:
         for email in REPORTING_MAIL_LIST:
             send_mail(f"Weekly report from {start_date_of_week} to {end_date} !",email,f"{weekly_csv_path}/{datetime.now().date()}.csv")
+
+if __name__ == '__main__':
+    main()
