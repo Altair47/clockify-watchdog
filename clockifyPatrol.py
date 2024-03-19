@@ -340,6 +340,10 @@ def main():
         if user['email'] in CUSTOM_EMPLOYEES:
             work_hours, work_days = GetWorkingHoursAndDays(user.get('id'))
             week_work_hours = work_hours * len(work_days)
+        else:
+            work_days = ["monday", "tuesday", "wednesday", "thursday", "friday"]
+            work_hours = 8
+            week_work_hours = 40
 
 
         print(f"\nUser ID: {user['id']}, User Name: {user['name']}, User Email: {user['email']}")
